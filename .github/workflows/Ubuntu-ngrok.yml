@@ -23,6 +23,32 @@ jobs:
         chmod +x /usr/local/bin/ngrok
         ngrok version
 
+    - name: Update ngrok agent
+      run: |
+        # Try running update (this only works if the old ngrok supports update)
+        if command -v ngrok; then
+          echo "Running ngrok update..."
+          ngrok update || echo "ngrok update failed or unsupported, proceeding to manual install"
+        else
+          echo "ngrok not found, skipping update"
+        fi
+
+        # Verify version after update attempt
+        echo "ngrok version after update attempt:"
+        ngrok version || echo "ngrok not found after update"
+
+        # If version still old or missing, manually install latest
+        if ! ngrok version | grep -q '^ngrok version 3'; then
+          echo "Manual install of latest ngrok..."
+          curl -L https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -o ngrok.tgz
+          tar -xvzf ngrok.tgz
+          sudo mv -f ngrok /usr/local/bin/ngrok
+          sudo chmod +x /usr/local/bin/ngrok
+        fi
+
+        echo "Final ngrok version:"
+        ngrok version
+
     - name: Start SSH via ngrok
       uses: rdp-studio/ssh2actions@main
       with:
