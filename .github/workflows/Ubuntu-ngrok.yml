@@ -25,20 +25,24 @@ jobs:
       run: |
         nohup ngrok tcp --authtoken=$NGROK_TOKEN --region=eu 22 > ngrok.log 2>&1 &
         sleep 5
-
-    - name: Get public ngrok URL and send Telegram notification
+        
+    - name: Send full ngrok tunnel JSON to Telegram
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
-        NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-        echo "Public ngrok URL: $NGROK_URL"
-
-        # Send message to Telegram bot
-        MESSAGE="🚀 ngrok tunnel is up!\n\nSSH address: $NGROK_URL"
+        # Get full tunnel JSON pretty-printed and escaped for JSON string
+        TUNNEL_JSON=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq '.' | jq -R -s '.')
+    
+        # Build JSON payload with tunnel JSON as text (markdown escapes all special chars)
+        JSON_PAYLOAD=$( jq -n \
+          --arg chat_id "$TELEGRAM_CHAT_ID" \
+          --arg text "$TUNNEL_JSON" \
+          '{chat_id: $chat_id, text: $text, parse_mode: "MarkdownV2"}' )
+    
         curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id="$TELEGRAM_CHAT_ID" \
-          -d text="$MESSAGE"
+          -H "Content-Type: application/json" \
+          -d "$JSON_PAYLOAD"
 
     - name: Keep ngrok running forever (tail logs)
       run: tail -f ngrok.log
