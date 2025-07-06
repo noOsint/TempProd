@@ -17,11 +17,12 @@ jobs:
 
     - name: Install Latest ngrok
       run: |
-        NGROK_ZIP=$(curl -s https://api.github.com/repos/ngrok/ngrok/releases/latest \
-          | grep "browser_download_url.*linux-amd64.zip" \
-          | cut -d '"' -f 4)
-        echo "Downloading $NGROK_ZIP"
-        curl -L "$NGROK_ZIP" -o ngrok.zip
+        # Get latest ngrok Linux AMD64 download URL using jq
+        NGROK_ZIP_URL=$(curl -s https://api.github.com/repos/ngrok/ngrok/releases/latest | jq -r '.assets[] | select(.name | test("linux-amd64.zip$")) | .browser_download_url')
+        echo "Latest ngrok URL: $NGROK_ZIP_URL"
+
+        # Download and install
+        curl -L "$NGROK_ZIP_URL" -o ngrok.zip
         unzip ngrok.zip -d ngrok-bin
         sudo mv ngrok-bin/ngrok /usr/local/bin/ngrok
         chmod +x /usr/local/bin/ngrok
