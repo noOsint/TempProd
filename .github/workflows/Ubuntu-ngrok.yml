@@ -1,64 +1,44 @@
-name: Ubuntu (ngrok)
+name: Ubuntu (ngrok SSH tunnel)
 
 on:
   workflow_dispatch:
 
 jobs:
-  Instance:
+  instance:
     runs-on: ubuntu-latest
-    environment: test
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y jq unzip curl
 
-    - name: Run Start Script
-      run: source ubuntu-start.sh
-
-    - name: Install ngrok (Direct)
+    - name: Install latest ngrok v3
       run: |
         curl -L https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -o ngrok.tgz
         tar -xvzf ngrok.tgz
-        sudo mv ngrok /usr/local/bin/ngrok
+        sudo mv -f ngrok /usr/local/bin/ngrok
         chmod +x /usr/local/bin/ngrok
         ngrok version
 
-    - name: Update ngrok agent
-      run: |
-        # Try running update (this only works if the old ngrok supports update)
-        if command -v ngrok; then
-          echo "Running ngrok update..."
-          ngrok update || echo "ngrok update failed or unsupported, proceeding to manual install"
-        else
-          echo "ngrok not found, skipping update"
-        fi
-
-        # Verify version after update attempt
-        echo "ngrok version after update attempt:"
-        ngrok version || echo "ngrok not found after update"
-
-        # If version still old or missing, manually install latest
-        if ! ngrok version | grep -q '^ngrok version 3'; then
-          echo "Manual install of latest ngrok..."
-          curl -L https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -o ngrok.tgz
-          tar -xvzf ngrok.tgz
-          sudo mv -f ngrok /usr/local/bin/ngrok
-          sudo chmod +x /usr/local/bin/ngrok
-        fi
-
-        echo "Final ngrok version:"
-        ngrok version
-
-    - name: Start SSH via ngrok
-      uses: rdp-studio/ssh2actions@main
-      with:
-        mode: ngrok
+    - name: Start ngrok TCP tunnel
       env:
         NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
-        NGROK_REGION: eu
-        SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+      run: |
+        nohup ngrok tcp --authtoken=$NGROK_TOKEN --region=eu 22 > ngrok.log 2>&1 &
+        sleep 5
+
+    - name: Get public ngrok URL and send Telegram notification
+      env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "Public ngrok URL: $NGROK_URL"
 
-    - name: Run End Script
-      run: source ubuntu-end.sh
+        # Send message to Telegram bot
+        MESSAGE="🚀 ngrok tunnel is up!\n\nSSH address: $NGROK_URL"
+        curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id="$TELEGRAM_CHAT_ID" \
+          -d text="$MESSAGE"
+
+    - name: Keep ngrok running forever (tail logs)
+      run: tail -f ngrok.log
