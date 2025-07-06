@@ -20,10 +20,12 @@ jobs:
         NGROK_ZIP=$(curl -s https://api.github.com/repos/ngrok/ngrok/releases/latest \
           | grep "browser_download_url.*linux-amd64.zip" \
           | cut -d '"' -f 4)
+        echo "Downloading $NGROK_ZIP"
         curl -L "$NGROK_ZIP" -o ngrok.zip
         unzip ngrok.zip -d ngrok-bin
         sudo mv ngrok-bin/ngrok /usr/local/bin/ngrok
-        ngrok version  # Verify installation
+        chmod +x /usr/local/bin/ngrok
+        ngrok version
 
     - name: Start SSH via ngrok
       uses: rdp-studio/ssh2actions@main
